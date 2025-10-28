@@ -241,9 +241,10 @@ impl<F: Field> Weights<F> {
         match self {
             Self::Evaluation { point } => point.eq_poly_outside(folding_randomness),
             Self::Linear { weight } => weight.eval_extension(folding_randomness),
-            Self::Geometric { a, n, .. } => {
-                geometric_till(*a, *n, &folding_randomness.0)
-            }
+            // Self::Geometric { a, n, .. } => {
+            //     geometric_till(*a, *n, &folding_randomness.0)
+            // }
+            Self::Geometric { weight, .. } => weight.eval_extension(folding_randomness),
         }
     }
 }
