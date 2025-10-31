@@ -83,8 +83,7 @@ impl<F: Field> Weights<F> {
     pub fn num_variables(&self) -> usize {
         match self {
             Self::Evaluation { point } => point.num_variables(),
-            Self::Linear { weight } => weight.num_variables(),
-            Self::Geometric { weight, .. } => weight.num_variables(),
+            Self::Linear { weight } | Self::Geometric { weight, .. } => weight.num_variables(),
         }
     }
 
@@ -93,20 +92,11 @@ impl<F: Field> Weights<F> {
         assert_eq!(self.num_variables(), poly.num_variables());
         match self {
             Self::Evaluation { point } => poly.evaluate(point),
-            Self::Linear { weight } => {
+            Self::Linear { weight } | Self::Geometric { weight, .. } => {
                 let poly: EvaluationsList<F> = poly.clone().into();
 
                 // We intentionally avoid parallel iterators here because this function is only called by the verifier,
                 // which is assumed to run on a lightweight device.
-                weight
-                    .evals()
-                    .iter()
-                    .zip(poly.evals())
-                    .map(|(&w, &p)| w * p)
-                    .sum()
-            }
-            Self::Geometric { weight, .. } => {
-                let poly: EvaluationsList<F> = poly.clone().into();
                 weight
                     .evals()
                     .iter()
@@ -141,26 +131,7 @@ impl<F: Field> Weights<F> {
             Self::Evaluation { point } => {
                 eval_eq(&point.0, accumulator.evals_mut(), factor);
             }
-            Self::Linear { weight } => {
-                #[cfg(feature = "parallel")]
-                accumulator
-                    .evals_mut()
-                    .par_iter_mut()
-                    .enumerate()
-                    .for_each(|(corner, acc)| {
-                        *acc += factor * weight.index(corner);
-                    });
-
-                #[cfg(not(feature = "parallel"))]
-                accumulator
-                    .evals_mut()
-                    .iter_mut()
-                    .enumerate()
-                    .for_each(|(corner, acc)| {
-                        *acc += factor * weight.index(corner);
-                    });
-            }
-            Self::Geometric { weight, .. } => {
+            Self::Linear { weight } | Self::Geometric { weight, .. } => {
                 #[cfg(feature = "parallel")]
                 accumulator
                     .evals_mut()
@@ -197,7 +168,7 @@ impl<F: Field> Weights<F> {
     #[cfg_attr(feature = "tracing", instrument(skip_all, fields(num_variables = self.num_variables())))]
     pub fn weighted_sum(&self, poly: &EvaluationsList<F>) -> F {
         match self {
-            Self::Linear { weight } => {
+            Self::Linear { weight } | Self::Geometric { weight, .. } => {
                 assert_eq!(poly.num_variables(), weight.num_variables());
                 #[cfg(not(feature = "parallel"))]
                 {
@@ -217,25 +188,6 @@ impl<F: Field> Weights<F> {
                 }
             }
             Self::Evaluation { point } => poly.eval_extension(point),
-            Self::Geometric { weight, .. } => {
-                assert_eq!(poly.num_variables(), weight.num_variables());
-                #[cfg(not(feature = "parallel"))]
-                {
-                    poly.evals()
-                        .iter()
-                        .zip(weight.evals().iter())
-                        .map(|(p, w)| *p * *w)
-                        .sum()
-                }
-                #[cfg(feature = "parallel")]
-                {
-                    poly.evals()
-                        .par_iter()
-                        .zip(weight.evals().par_iter())
-                        .map(|(p, w)| *p * *w)
-                        .sum()
-                }
-            }
         }
     }
 
@@ -323,8 +275,7 @@ impl<F: Field> Statement<F> {
         assert_eq!(weights.num_variables(), self.num_variables());
         let defer_evaluation = match &weights {
             Weights::Evaluation { .. } => false,
-            Weights::Linear { .. } => true,
-            Weights::Geometric { .. } => false,
+            Weights::Linear { .. } | Weights::Geometric { .. } => true,
         };
         self.constraints.push(Constraint {
             weights,
@@ -338,8 +289,7 @@ impl<F: Field> Statement<F> {
         assert_eq!(weights.num_variables(), self.num_variables());
         let defer_evaluation = match &weights {
             Weights::Evaluation { .. } => false,
-            Weights::Linear { .. } => true,
-            Weights::Geometric { .. } => true,
+            Weights::Linear { .. } | Weights::Geometric { .. } => true,
         };
         self.constraints.insert(
             0,
@@ -361,8 +311,7 @@ impl<F: Field> Statement<F> {
             constraints.into_iter().map(|(weights, sum)| {
                 let defer_evaluation = match &weights {
                     Weights::Evaluation { .. } => false,
-                    Weights::Linear { .. } => true,
-                    Weights::Geometric { .. } => true,
+                    Weights::Linear { .. } | Weights::Geometric { .. } => true,
                 };
                 Constraint {
                     weights,

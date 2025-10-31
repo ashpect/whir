@@ -181,7 +181,6 @@ fn eval_multilinear<F: Field>(evals: &[F], point: &[F]) -> F {
 /// Evaluates the mle of a geometric progression at a given point x where the underlying vector is [1,x,x^2,x^3,...,x^{n-1},0,...,0]
 pub fn geometric_till<F: Field>(mut a: F, n: usize, x: &[F]) -> F {
     let k = x.len();
-    println!("geometric_till: a = {}, n = {}, k = {:?}", a, n, k);
     assert!(n > 0 && n < (1 << k));
     let mut borrow_0 = F::one();
     let mut borrow_1 = F::zero();
